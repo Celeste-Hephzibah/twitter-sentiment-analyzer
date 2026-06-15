@@ -1,17 +1,17 @@
 import streamlit as st
 import pickle
 import re
+import os
 import nltk
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
 import pandas as pd
 import matplotlib.pyplot as plt
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
 
 nltk.download('stopwords', quiet=True)
 nltk.download('wordnet', quiet=True)
-
-model = pickle.load(open('model/sentiment_model.pkl', 'rb'))
-tfidf = pickle.load(open('model/tfidf_vectorizer.pkl', 'rb'))
 
 lemmatizer = WordNetLemmatizer()
 stop_words = set(stopwords.words('english'))
@@ -25,6 +25,24 @@ def clean_tweet(text):
     words = text.split()
     words = [lemmatizer.lemmatize(w) for w in words if w not in stop_words and len(w) > 2]
     return ' '.join(words)
+
+@st.cache_resource
+def load_model():
+    if os.path.exists('model/sentiment_model.pkl'):
+        model = pickle.load(open('model/sentiment_model.pkl', 'rb'))
+        tfidf = pickle.load(open('model/tfidf_vectorizer.pkl', 'rb'))
+    else:
+        st.info("Training model for the first time, please wait 2-3 minutes...")
+        df = pd.read_csv('https://raw.githubusercontent.com/dD2405/Twitter_Sentiment_Analysis/master/train.csv')
+        df = df[['label', 'tweet']].rename(columns={'label':'target','tweet':'text'})
+        df['cleaned'] = df['text'].apply(clean_tweet)
+        tfidf = TfidfVectorizer(max_features=50000, ngram_range=(1,2))
+        X = tfidf.fit_transform(df['cleaned'])
+        model = LogisticRegression(max_iter=1000)
+        model.fit(X, df['target'])
+    return model, tfidf
+
+model, tfidf = load_model()
 
 st.set_page_config(page_title="Twitter Sentiment Analyzer", page_icon="🐦")
 st.title("🐦 Twitter Sentiment Analyzer")
